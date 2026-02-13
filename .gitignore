@@ -1,0 +1,13 @@
+# Python sanal ortamı
+venv/
+__pycache__/
+*.pyc
+
+# Geçici ve arşiv dosyaları (Gizlilik için GitHub'a atılmaz)
+current_scan.jpg
+temp_verify.jpg
+arsiv/
+*.csv
+
+# İşletim sistemi dosyaları
+.DS_Store

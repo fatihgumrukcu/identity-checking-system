@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>Kimlik Doğrulama Sistemi</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; }
+        .container { max-width: 900px; margin: 40px auto; text-align: center; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+        .img-container { width: 100%; max-height: 500px; margin-top: 20px; display: none; border-radius: 10px; overflow: hidden; position: relative; }
+        
+        /* 🟩 MRZ KILAVUZU (Grid İçinde Sabit) */
+        .mrz-guide {
+            position: absolute; bottom: 0; left: 0; width: 100%; height: 35%;
+            background: rgba(40, 167, 69, 0.15); border-top: 2px dashed #28a745;
+            color: #28a745; font-size: 10px; font-weight: bold;
+            display: flex; align-items: center; justify-content: center;
+            pointer-events: none; z-index: 10;
+        }
+
+        /* 🔥 SÜSLÜ TARAMA ANİMASYONU (#e17b47) */
+        .scan-overlay {
+            display: none;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 20;
+            overflow: hidden;
+        }
+
+        .scan-line {
+            position: absolute;
+            width: 100%;
+            height: 80px;
+            background: linear-gradient(to bottom, transparent, rgba(225, 123, 71, 0.3), #e17b47, transparent);
+            border-bottom: 2px solid #e17b47;
+            box-shadow: 0 5px 20px rgba(225, 123, 71, 0.6);
+            /* Animasyon süresi 2.5 saniyeye çıkarıldı */
+            animation: fancy-scan 2.5s ease-in-out infinite;
+        }
+
+        @keyframes fancy-scan {
+            0% { top: -80px; opacity: 0; }
+            15% { opacity: 1; }
+            85% { opacity: 1; }
+            100% { top: 100%; opacity: 0; }
+        }
+
+        .controls { margin-top: 25px; }
+        .verify-btn { padding: 12px 35px; background: #e17b47; color: white; border: none; cursor: pointer; border-radius: 5px; font-weight: bold; font-size: 16px; transition: 0.3s; }
+        .verify-btn:hover { background: #c56536; }
+        #result { margin-top: 20px; text-align: left; }
+        .success-card { background: #d4edda; border-left: 5px solid #28a745; padding: 15px; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>🆔 Kimlik Doğrulama Sistemi</h2>
+        <p>Görseli yükleyin ve <b>yazı satırlarını yeşil bölgeye</b> sığdırın.</p>
+        
+        <input type="file" id="fileInput" accept="image/*">
+        
+        <div class="img-container" id="cropperWrapper">
+            <img id="image">
+        </div>
+
+        <div class="controls" id="actionButtons" style="display: none;">
+            <button id="verifyBtn" class="verify-btn">🔍 Analiz Et ve Kaydet</button>
+        </div>
+        <div id="result"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+    <script>
+        let cropper;
+        const fileInput = document.getElementById('fileInput');
+        const image = document.getElementById('image');
+        const cropperWrapper = document.getElementById('cropperWrapper');
+        const actionButtons = document.getElementById('actionButtons');
+
+        fileInput.onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                image.src = event.target.result;
+                cropperWrapper.style.display = 'block';
+                actionButtons.style.display = 'block';
+                if (cropper) cropper.destroy();
+                
+                cropper = new Cropper(image, {
+                    aspectRatio: 10 / 6,
+                    viewMode: 1,
+                    ready() {
+                        const face = document.querySelector('.cropper-face');
+                        const guide = document.createElement('div');
+                        guide.className = 'mrz-guide';
+                        guide.innerText = 'MRZ ALANI';
+                        face.appendChild(guide);
+
+                        const overlay = document.createElement('div');
+                        overlay.className = 'scan-overlay';
+                        overlay.id = 'scanOverlay';
+                        overlay.innerHTML = '<div class="scan-line"></div>';
+                        face.appendChild(overlay);
+                    }
+                });
+            };
+            reader.readAsDataURL(file);
+        };
+
+        document.getElementById('verifyBtn').onclick = () => {
+            const overlay = document.getElementById('scanOverlay');
+            const resultDiv = document.getElementById('result');
+            
+            overlay.style.display = 'block'; // Lazer başlasın
+            resultDiv.innerHTML = "⏳ Derin tarama yapılıyor, veriler analiz ediliyor...";
+
+            const canvas = cropper.getCroppedCanvas({ width: 1000, height: 600 });
+            const dataUrl = canvas.toDataURL('image/jpeg');
+
+            // Başlangıç zamanını tutalım
+            const startTime = Date.now();
+
+            fetch('/upload', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image: dataUrl })
+            })
+            .then(res => res.json())
+            .then(data => {
+                // Model çok hızlı dönse bile animasyonu en az 3 saniye izletelim
+                const elapsedTime = Date.now() - startTime;
+                const minWait = 3000; 
+                const remainingTime = Math.max(0, minWait - elapsedTime);
+
+                setTimeout(() => {
+                    overlay.style.display = 'none'; // Lazer dursun
+                    if(data.status === "ok") {
+                        resultDiv.className = 'success-card';
+                        resultDiv.innerHTML = `<h3>✅ Analiz Başarıyla Tamamlandı</h3><pre>${JSON.stringify(data, null, 2)}</pre>`;
+                    } else {
+                        resultDiv.innerHTML = `<div style="color:red">Hata: ${data.msg}</div>`;
+                    }
+                }, remainingTime);
+            });
+        };
+    </script>
+</body>
+</html>
