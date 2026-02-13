@@ -14,17 +14,14 @@ validator = IdentityValidator()
 SAVE_FILE = "dogrulanan_kimlikler.csv"
 ARCHIVE_FOLDER = "arsiv"
 
-# Arşiv klasörü yoksa otomatik oluşturulur
 if not os.path.exists(ARCHIVE_FOLDER):
     os.makedirs(ARCHIVE_FOLDER)
 
 def save_all_data(data, img):
-    """Verileri CSV'ye ekler ve görseli isimlendirerek arşivler."""
     exists = os.path.isfile(SAVE_FILE)
     timestamp_full = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     timestamp_short = datetime.now().strftime("%Y%m%d_%H%M%S")
     
-    # 1. CSV Kaydı
     with open(SAVE_FILE, 'a', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
         if not exists:
@@ -38,8 +35,6 @@ def save_all_data(data, img):
             data.get('tc_no')
         ])
 
-    # 2. Görsel Arşivleme
-    # Dosya adı formatı: AD_SOYAD_TARIH.jpg
     file_name = f"{data.get('ad')}_{data.get('soyad')}_{timestamp_short}.jpg".replace(" ", "_")
     archive_path = os.path.join(ARCHIVE_FOLDER, file_name)
     cv2.imwrite(archive_path, img)
@@ -54,19 +49,15 @@ def upload():
         data = request.json
         img_base64 = data['image'].split(",")[1]
         
-        # Base64'ten görseli çöz ve OpenCV formatına getir
         nparr = np.frombuffer(base64.b64decode(img_base64), np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
-        # Geçici dosya oluşturur
         temp_path = "current_scan.jpg"
         cv2.imwrite(temp_path, img)
         
-        # Validator işlemini başlatır
         result = validator.process_mrz(temp_path)
         
         if result["status"] == "ok":
-            # Başarılı sonuçlarda veriyi kaydet ve görseli arşivle
             save_all_data(result, img)
             return jsonify(result)
         else:
@@ -75,5 +66,8 @@ def upload():
     except Exception as e:
         return jsonify({"status": "error", "msg": str(e)})
 
+# --- CANLI SUNUCU AYARI ---
 if __name__ == '__main__':
-    app.run(debug=True, port=5001)
+    # host='0.0.0.0' sayesinde 146.190.238.189 üzerinden erişim sağlanır
+    # debug=False yapıldı, canlı ortamda güvenlik ve hız için gereklidir
+    app.run(host='0.0.0.0', port=5001, debug=False)

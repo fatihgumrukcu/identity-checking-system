@@ -2,69 +2,383 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kimlik Doğrulama Sistemi</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; }
-        .container { max-width: 900px; margin: 40px auto; text-align: center; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
-        .img-container { width: 100%; max-height: 500px; margin-top: 20px; display: none; border-radius: 10px; overflow: hidden; position: relative; }
-        
-        /* 🟩 MRZ KILAVUZU (Grid İçinde Sabit) */
-        .mrz-guide {
-            position: absolute; bottom: 0; left: 0; width: 100%; height: 35%;
-            background: rgba(40, 167, 69, 0.15); border-top: 2px dashed #28a745;
-            color: #28a745; font-size: 10px; font-weight: bold;
-            display: flex; align-items: center; justify-content: center;
-            pointer-events: none; z-index: 10;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
 
-        /* 🔥 SÜSLÜ TARAMA ANİMASYONU (#e17b47) */
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 950px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+            padding: 40px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #667eea, #764ba2, #e17b47);
+            border-radius: 20px 20px 0 0;
+        }
+
+        .header {
+            margin-bottom: 30px;
+        }
+
+        h2 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #6b7280;
+            font-size: 1.1rem;
+            font-weight: 400;
+            line-height: 1.6;
+        }
+
+        .highlight {
+            color: #e17b47;
+            font-weight: 600;
+        }
+
+        .upload-area {
+            background: #f8fafc;
+            border: 2px dashed #e2e8f0;
+            border-radius: 16px;
+            padding: 40px;
+            margin: 30px 0;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .upload-area:hover {
+            border-color: #e17b47;
+            background: #fff7ed;
+            transform: translateY(-2px);
+        }
+
+        .upload-area.has-file {
+            border-color: #10b981;
+            background: #f0fdf4;
+        }
+
+        .upload-icon {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 20px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .file-label {
+            display: block;
+            cursor: pointer;
+            color: #374151;
+            font-weight: 500;
+            font-size: 1.1rem;
+        }
+
+        .img-container {
+            width: 100%;
+            max-height: 500px;
+            margin-top: 30px;
+            display: none;
+            border-radius: 16px;
+            overflow: hidden;
+            position: relative;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        /* 🟩 Modern MRZ KILAVUZU */
+        .mrz-guide {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 35%;
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(34, 197, 94, 0.15));
+            border-top: 3px dashed #10b981;
+            color: #059669;
+            font-size: 12px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            z-index: 10;
+            backdrop-filter: blur(5px);
+        }
+
+        /* 🔥 Modern TARAMA ANİMASYONU */
         .scan-overlay {
             display: none;
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none; z-index: 20;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 20;
             overflow: hidden;
         }
 
         .scan-line {
             position: absolute;
             width: 100%;
-            height: 80px;
-            background: linear-gradient(to bottom, transparent, rgba(225, 123, 71, 0.3), #e17b47, transparent);
-            border-bottom: 2px solid #e17b47;
-            box-shadow: 0 5px 20px rgba(225, 123, 71, 0.6);
-            /* Animasyon süresi 2.5 saniyeye çıkarıldı */
-            animation: fancy-scan 2.5s ease-in-out infinite;
+            height: 100px;
+            background: linear-gradient(to bottom, 
+                transparent 0%, 
+                rgba(225, 123, 71, 0.1) 20%,
+                rgba(225, 123, 71, 0.4) 50%,
+                #e17b47 60%,
+                rgba(225, 123, 71, 0.4) 70%,
+                rgba(225, 123, 71, 0.1) 80%,
+                transparent 100%
+            );
+            border-bottom: 3px solid #e17b47;
+            box-shadow: 0 0 30px rgba(225, 123, 71, 0.8);
+            animation: modern-scan 2.5s ease-in-out infinite;
         }
 
-        @keyframes fancy-scan {
-            0% { top: -80px; opacity: 0; }
-            15% { opacity: 1; }
-            85% { opacity: 1; }
-            100% { top: 100%; opacity: 0; }
+        @keyframes modern-scan {
+            0% { 
+                top: -100px; 
+                opacity: 0; 
+                transform: scaleY(0.8);
+            }
+            15% { 
+                opacity: 1; 
+                transform: scaleY(1);
+            }
+            85% { 
+                opacity: 1; 
+                transform: scaleY(1);
+            }
+            100% { 
+                top: 100%; 
+                opacity: 0; 
+                transform: scaleY(0.8);
+            }
         }
 
-        .controls { margin-top: 25px; }
-        .verify-btn { padding: 12px 35px; background: #e17b47; color: white; border: none; cursor: pointer; border-radius: 5px; font-weight: bold; font-size: 16px; transition: 0.3s; }
-        .verify-btn:hover { background: #c56536; }
-        #result { margin-top: 20px; text-align: left; }
-        .success-card { background: #d4edda; border-left: 5px solid #28a745; padding: 15px; border-radius: 8px; }
+        .controls {
+            margin-top: 30px;
+        }
+
+        .verify-btn {
+            background: linear-gradient(135deg, #e17b47, #c56536);
+            color: white;
+            border: none;
+            padding: 16px 40px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(225, 123, 71, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .verify-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .verify-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(225, 123, 71, 0.4);
+        }
+
+        .verify-btn:hover::before {
+            left: 100%;
+        }
+
+        .verify-btn:active {
+            transform: translateY(0);
+        }
+
+        #result {
+            margin-top: 30px;
+            text-align: left;
+        }
+
+        .success-card {
+            background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+            border-left: 5px solid #10b981;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.1);
+        }
+
+        .success-card h3 {
+            color: #059669;
+            font-size: 1.3rem;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .error-card {
+            background: linear-gradient(135deg, #fef2f2, #fee2e2);
+            border-left: 5px solid #ef4444;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(239, 68, 68, 0.1);
+            color: #dc2626;
+            font-weight: 500;
+        }
+
+        .loading-message {
+            background: linear-gradient(135deg, #eff6ff, #dbeafe);
+            border-left: 5px solid #3b82f6;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.1);
+            color: #1d4ed8;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 3px solid #e5e7eb;
+            border-top: 3px solid #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        pre {
+            background: #f8fafc;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .container {
+                padding: 30px 20px;
+                margin: 10px;
+            }
+
+            h2 {
+                font-size: 2rem;
+            }
+
+            .subtitle {
+                font-size: 1rem;
+            }
+
+            .upload-area {
+                padding: 30px 20px;
+            }
+
+            .verify-btn {
+                padding: 14px 30px;
+                font-size: 1rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            h2 {
+                font-size: 1.75rem;
+            }
+
+            .container {
+                padding: 25px 15px;
+            }
+
+            .upload-area {
+                padding: 25px 15px;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h2>🆔 Kimlik Doğrulama Sistemi</h2>
-        <p>Görseli yükleyin ve <b>yazı satırlarını yeşil bölgeye</b> sığdırın.</p>
+        <div class="header">
+            <h2>🆔 Kimlik Doğrulama Sistemi</h2>
+            <p class="subtitle">Görseli yükleyin ve <span class="highlight">yazı satırlarını yeşil bölgeye</span> sığdırın.</p>
+        </div>
         
-        <input type="file" id="fileInput" accept="image/*">
+        <div class="upload-area" id="uploadArea">
+            <div class="upload-icon">📷</div>
+            <label for="fileInput" class="file-label">
+                Kimlik görselinizi yüklemek için tıklayın veya sürükleyin
+            </label>
+            <input type="file" id="fileInput" accept="image/*">
+        </div>
         
         <div class="img-container" id="cropperWrapper">
             <img id="image">
         </div>
 
         <div class="controls" id="actionButtons" style="display: none;">
-            <button id="verifyBtn" class="verify-btn">🔍 Analiz Et ve Kaydet</button>
+            <button id="verifyBtn" class="verify-btn">
+                🔍 Analiz Et ve Kaydet
+            </button>
         </div>
+        
         <div id="result"></div>
     </div>
 
@@ -75,16 +389,49 @@
         const image = document.getElementById('image');
         const cropperWrapper = document.getElementById('cropperWrapper');
         const actionButtons = document.getElementById('actionButtons');
+        const uploadArea = document.getElementById('uploadArea');
+
+        // Drag and drop functionality
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.style.borderColor = '#e17b47';
+            uploadArea.style.background = '#fff7ed';
+        });
+
+        uploadArea.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            uploadArea.style.borderColor = '#e2e8f0';
+            uploadArea.style.background = '#f8fafc';
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.style.borderColor = '#e2e8f0';
+            uploadArea.style.background = '#f8fafc';
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0 && files[0].type.startsWith('image/')) {
+                fileInput.files = files;
+                handleFileSelect(files[0]);
+            }
+        });
 
         fileInput.onchange = (e) => {
             const file = e.target.files[0];
-            if (!file) return;
+            if (file) {
+                handleFileSelect(file);
+            }
+        };
 
+        function handleFileSelect(file) {
             const reader = new FileReader();
             reader.onload = (event) => {
                 image.src = event.target.result;
                 cropperWrapper.style.display = 'block';
                 actionButtons.style.display = 'block';
+                uploadArea.classList.add('has-file');
+                uploadArea.querySelector('.file-label').textContent = `✅ ${file.name} seçildi`;
+                
                 if (cropper) cropper.destroy();
                 
                 cropper = new Cropper(image, {
@@ -106,19 +453,23 @@
                 });
             };
             reader.readAsDataURL(file);
-        };
+        }
 
         document.getElementById('verifyBtn').onclick = () => {
             const overlay = document.getElementById('scanOverlay');
             const resultDiv = document.getElementById('result');
             
-            overlay.style.display = 'block'; // Lazer başlasın
-            resultDiv.innerHTML = "⏳ Derin tarama yapılıyor, veriler analiz ediliyor...";
+            overlay.style.display = 'block';
+            resultDiv.innerHTML = `
+                <div class="loading-message">
+                    <div class="spinner"></div>
+                    <span>⏳ Derin tarama yapılıyor, veriler analiz ediliyor...</span>
+                </div>
+            `;
 
             const canvas = cropper.getCroppedCanvas({ width: 1000, height: 600 });
             const dataUrl = canvas.toDataURL('image/jpeg');
 
-            // Başlangıç zamanını tutalım
             const startTime = Date.now();
 
             fetch('/upload', {
@@ -128,20 +479,28 @@
             })
             .then(res => res.json())
             .then(data => {
-                // Model çok hızlı dönse bile animasyonu en az 3 saniye izletelim
                 const elapsedTime = Date.now() - startTime;
                 const minWait = 3000; 
                 const remainingTime = Math.max(0, minWait - elapsedTime);
 
                 setTimeout(() => {
-                    overlay.style.display = 'none'; // Lazer dursun
+                    overlay.style.display = 'none';
                     if(data.status === "ok") {
                         resultDiv.className = 'success-card';
-                        resultDiv.innerHTML = `<h3>✅ Analiz Başarıyla Tamamlandı</h3><pre>${JSON.stringify(data, null, 2)}</pre>`;
+                        resultDiv.innerHTML = `
+                            <h3>✅ Analiz Başarıyla Tamamlandı</h3>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        `;
                     } else {
-                        resultDiv.innerHTML = `<div style="color:red">Hata: ${data.msg}</div>`;
+                        resultDiv.className = 'error-card';
+                        resultDiv.innerHTML = `<div>❌ Hata: ${data.msg}</div>`;
                     }
                 }, remainingTime);
+            })
+            .catch(error => {
+                overlay.style.display = 'none';
+                resultDiv.className = 'error-card';
+                resultDiv.innerHTML = `<div>❌ Bağlantı hatası: ${error.message}</div>`;
             });
         };
     </script>
