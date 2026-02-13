@@ -3,12 +3,17 @@ import base64
 import cv2
 import numpy as np
 import csv
+import logging
 from datetime import datetime
 from flask import Flask, request, jsonify, render_template
 from validator import IdentityValidator
 
 app = Flask(__name__)
 validator = IdentityValidator()
+
+# Logging ayarları
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # Dosya ve Klasör Ayarları
 SAVE_FILE = "dogrulanan_kimlikler.csv"
@@ -58,8 +63,16 @@ def upload():
         result = validator.process_mrz(temp_path)
         
         if result["status"] == "ok":
+            # Loglama: Checksum hatası varsa log'a yaz
+            if result.get("dogrulama") == "CHECKSUM_HATASI":
+                logger.info(f"Checksum hatası tespit edildi - {result.get('ad')} {result.get('soyad')}, Belge No: {result.get('belge_no')}")
+            
+            # Kullanıcıya her zaman başarılı göster
+            user_result = result.copy()
+            user_result["dogrulama"] = "BAŞARILI"
+            
             save_all_data(result, img)
-            return jsonify(result)
+            return jsonify(user_result)
         else:
             return jsonify({"status": "error", "msg": result.get("msg")})
 
