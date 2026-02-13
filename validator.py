@@ -6,11 +6,11 @@ from mrz.checker.td1 import TD1CodeChecker
 
 class IdentityValidator:
     def __init__(self):
-        # Model dosyalarını sunucuda CPU ile çalışacak şekilde yükler
+        # Sunucuda CPU ile çalışacak şekilde EasyOCR yüklenir.
         self.reader = easyocr.Reader(['en'], gpu=False)
 
     def force_numeric(self, text):
-        """Özellikle tarih ve numara alanlarındaki harf hatalarını rakama çevirir."""
+        """Tarih ve checksum alanlarındaki harf hatalarını rakama çevirir."""
         mapping = {'O': '0', 'I': '1', 'L': '1', 'G': '6', 'S': '5', 'B': '8', 'T': '7', 'Z': '2'}
         for char, digit in mapping.items():
             text = text.replace(char, digit)
@@ -18,7 +18,7 @@ class IdentityValidator:
 
     def clean_field(self, text):
         if not text: return "Bilinmiyor"
-        # İsimlerdeki rakam hatalarını harfe çevirir
+        # İsim alanlarındaki rakam karışıklıklarını harfe çevirir.
         text = text.replace('6', 'G').replace('0', 'O').replace('1', 'I').replace('5', 'S').replace('8', 'B')
         return text.replace('<', ' ').strip()
 
@@ -42,36 +42,54 @@ class IdentityValidator:
         img = cv2.imread(path)
         if img is None: return {"status": "error", "msg": "dosya_bulunamadi"}
 
-        img_resized = cv2.resize(img, (1000, 600))
-        mrz_roi = img_resized[370:590, 10:990]
+        # Daha iyi OCR için çözünürlüğü artırıyoruz.
+        img_resized = cv2.resize(img, (1200, 800))
+        # MRZ alanını biraz daha geniş tarayalım.
+        mrz_roi = img_resized[350:780, 10:1190]
 
         for pass_num in range(3):
             thresh = self.apply_filters(mrz_roi, pass_num)
             results = self.reader.readtext(thresh, detail=0, allowlist='0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ<')
             all_text = "".join([t.upper() for t in results])
 
-            # Debug: OCR'ın yakaladığı tüm ham metni logla
+            # DÜZELTME: MRZ her zaman I, C veya A ile başlar. Önündeki çöpleri (01932 vb.) temizle.
+            match = re.search(r'[ICA]', all_text)
+            if match:
+                all_text = all_text[match.start():]
+
             print(f"--- PASS {pass_num} HAM METİN: {all_text}")
 
-            lines = re.findall(r'[A-Z0-9<]{30}', all_text)
+            # DÜZELTME: Karakter sayısını 28-32 arası esnek tutup sonra 30'a tamamlayacağız.
+            lines = re.findall(r'[A-Z0-9<]{28,32}', all_text)
             
             if len(lines) >= 3:
-                # Kritik: 2. satırı rakamlara zorla (Tarih ve Checksumların olduğu yer)
-                line1 = lines[0]
-                line2 = self.force_numeric(lines[1])
-                line3 = lines[2]
+                processed_lines = []
+                for idx, line in enumerate(lines[:3]):
+                    # 2. satır (tarihler) için rakam zorlaması yap.
+                    if idx == 1:
+                        line = self.force_numeric(line)
+                    
+                    # 30 karaktere tamamla veya kırp.
+                    processed_lines.append(line.ljust(30, '<')[:30])
                 
-                mrz_data = f"{line1}\n{line2}\n{line3}"
-                
-                # Debug: Oluşturulan MRZ bloğunu logla
+                mrz_data = "\n".join(processed_lines)
                 print(f"--- ANALİZ EDİLEN MRZ:\n{mrz_data}")
                 
                 try:
                     checker = TD1CodeChecker(mrz_data)
                     fields = checker.fields()
                     
-                    # Eğer checksum hatası varsa hangi alanın hatalı olduğunu logla
-                    if not checker.valid:
+                    # DÜZELTME: .valid hatasını önlemek için güvenli kontrol.
+                    is_valid = False
+                    if hasattr(checker, 'valid'):
+                        is_valid = checker.valid
+                    elif hasattr(checker, 'is_valid'):
+                        is_valid = checker.is_valid()
+                    else:
+                        # Eğer kütüphane parse edebildiyse checksum hatasını report ile kontrol et.
+                        is_valid = len(checker.report().errors) == 0
+
+                    if not is_valid:
                         print(f"!!! CHECKSUM HATASI DETAYI: {checker.report()}") 
 
                     return {
@@ -81,7 +99,7 @@ class IdentityValidator:
                         "soyad": self.clean_field(fields.surname),
                         "tc_no": fields.optional_data.replace('<', ''),
                         "belge_no": fields.document_number.replace('<', ''),
-                        "dogrulama": "BAŞARILI" if checker.valid else "CHECKSUM_HATASI",
+                        "dogrulama": "BAŞARILI" if is_valid else "CHECKSUM_HATASI",
                         "pass_used": pass_num
                     }
                 except Exception as e:
