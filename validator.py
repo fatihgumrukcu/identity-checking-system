@@ -44,32 +44,27 @@ class IdentityValidator:
 
         # Daha iyi OCR için çözünürlüğü artırıyoruz.
         img_resized = cv2.resize(img, (1200, 800))
-        # MRZ alanını biraz daha geniş tarayalım.
-        mrz_roi = img_resized[350:780, 10:1190]
+        # MRZ alanı genellikle alt kısımdadır, koordinatları buna göre optimize ettik.
+        mrz_roi = img_resized[450:780, 20:1180] 
 
         for pass_num in range(3):
             thresh = self.apply_filters(mrz_roi, pass_num)
             results = self.reader.readtext(thresh, detail=0, allowlist='0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ<')
             all_text = "".join([t.upper() for t in results])
 
-            # DÜZELTME: MRZ her zaman I, C veya A ile başlar. Önündeki çöpleri (01932 vb.) temizle.
-            match = re.search(r'[ICA]', all_text)
-            if match:
-                all_text = all_text[match.start():]
-
+            # Ham metni logla.
             print(f"--- PASS {pass_num} HAM METİN: {all_text}")
 
-            # DÜZELTME: Karakter sayısını 28-32 arası esnek tutup sonra 30'a tamamlayacağız.
+            # Sadece geçerli karakter uzunluğunda ve içinde '<' olan satırları bul (Metinleri elemek için).
             lines = re.findall(r'[A-Z0-9<]{28,32}', all_text)
-            
-            if len(lines) >= 3:
+            actual_mrz_lines = [l for l in lines if '<' in l]
+
+            if len(actual_mrz_lines) >= 3:
                 processed_lines = []
-                for idx, line in enumerate(lines[:3]):
-                    # 2. satır (tarihler) için rakam zorlaması yap.
-                    if idx == 1:
+                # İlk 3 satırı formatla.
+                for idx, line in enumerate(actual_mrz_lines[:3]):
+                    if idx == 1: 
                         line = self.force_numeric(line)
-                    
-                    # 30 karaktere tamamla veya kırp.
                     processed_lines.append(line.ljust(30, '<')[:30])
                 
                 mrz_data = "\n".join(processed_lines)
@@ -77,21 +72,17 @@ class IdentityValidator:
                 
                 try:
                     checker = TD1CodeChecker(mrz_data)
-                    fields = checker.fields()
                     
-                    # DÜZELTME: .valid hatasını önlemek için güvenli kontrol.
-                    is_valid = False
-                    if hasattr(checker, 'valid'):
-                        is_valid = checker.valid
-                    elif hasattr(checker, 'is_valid'):
-                        is_valid = checker.is_valid()
-                    else:
-                        # Eğer kütüphane parse edebildiyse checksum hatasını report ile kontrol et.
-                        is_valid = len(checker.report().errors) == 0
+                    # _Report object is not callable hatası için güvenli erişim:
+                    report_obj = checker.report
+                    report_data = report_obj() if callable(report_obj) else report_obj
+                    
+                    is_valid = len(report_data.errors) == 0
 
                     if not is_valid:
-                        print(f"!!! CHECKSUM HATASI DETAYI: {checker.report()}") 
+                        print(f"!!! CHECKSUM HATASI: {report_data.errors}")
 
+                    fields = checker.fields()
                     return {
                         "status": "ok",
                         "ulke": fields.country,
@@ -103,7 +94,7 @@ class IdentityValidator:
                         "pass_used": pass_num
                     }
                 except Exception as e:
-                    print(f"!!! MRZ PARSE HATASI: {str(e)}")
+                    print(f"!!! PARSE HATASI: {str(e)}")
                     continue 
 
-        return {"status": "fail", "msg": "mrz_okunamadi"}
+        return {"status": "fail", "msg": "mrz_bulunamadi"}
