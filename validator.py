@@ -50,17 +50,7 @@ class IdentityValidator:
             
             print(f"--- PASS {pass_num} HAM METİN: {all_text}")
 
-            # 1. PASAPORT (TD3) KONTROLÜ - 44 Karakterli 2 Satır
-            td3_lines = re.findall(r'[A-Z0-9<]{42,46}', all_text)
-            if len(td3_lines) >= 2:
-                mrz_data = "\n".join([line.ljust(44, '<')[:44] for line in td3_lines[:2]])
-                try:
-                    checker = TD3CodeChecker(mrz_data)
-                    fields = checker.fields()
-                    return self.format_response(checker, fields, "PASAPORT", pass_num)
-                except: pass
-
-            # 2. KİMLİK (TD1) KONTROLÜ - 30 Karakterli 3 Satır
+            # 1. KİMLİK (TD1) KONTROLÜ - 30 Karakterli 3 Satır (Öncelikli)
             td1_lines = re.findall(r'[A-Z0-9<]{28,32}', all_text)
             if len(td1_lines) >= 3:
                 processed = []
@@ -70,10 +60,34 @@ class IdentityValidator:
                     processed.append(line)
                 
                 try:
-                    checker = TD1CodeChecker("\n".join(processed))
+                    mrz_data = "\n".join(processed)
+                    print(f"--- TD1 MRZ DATA:\n{mrz_data}")
+                    checker = TD1CodeChecker(mrz_data)
                     fields = checker.fields()
+                    print(f"--- TD1 FIELDS: {fields}")
                     return self.format_response(checker, fields, "KİMLİK", pass_num)
-                except: pass
+                except Exception as e:
+                    print(f"--- TD1 ERROR: {e}")
+                    pass
+
+            # 2. PASAPORT (TD3) KONTROLÜ - 44 Karakterli 2 Satır (Sonra)
+            td3_lines = re.findall(r'[A-Z0-9<]{42,46}', all_text)
+            if len(td3_lines) >= 2:
+                processed = []
+                for line in td3_lines[:2]:
+                    line = line.ljust(44, '<')[:44]
+                    processed.append(line)
+                
+                try:
+                    mrz_data = "\n".join(processed)
+                    print(f"--- TD3 MRZ DATA:\n{mrz_data}")
+                    checker = TD3CodeChecker(mrz_data)
+                    fields = checker.fields()
+                    print(f"--- TD3 FIELDS: {fields}")
+                    return self.format_response(checker, fields, "PASAPORT", pass_num)
+                except Exception as e:
+                    print(f"--- TD3 ERROR: {e}")
+                    pass
 
         return {"status": "fail", "msg": "mrz_okunamadi"}
 
