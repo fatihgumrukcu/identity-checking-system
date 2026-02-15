@@ -11,38 +11,44 @@ from validator import IdentityValidator
 app = Flask(__name__)
 validator = IdentityValidator()
 
-# Logging ayarları
+# Logging Configuration
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Dosya ve Klasör Ayarları
-SAVE_FILE = "dogrulanan_kimlikler.csv"
-ARCHIVE_FOLDER = "arsiv"
+# File and Folder Settings
+SAVE_FILE = os.path.join(os.getcwd(), "verified_identities.csv")
+ARCHIVE_FOLDER = os.path.join(os.getcwd(), "archive")
 
-if not os.path.exists(ARCHIVE_FOLDER):
-    os.makedirs(ARCHIVE_FOLDER)
+os.makedirs(ARCHIVE_FOLDER, exist_ok=True)
 
 def save_all_data(data, img):
+    """Saves validation results to CSV and archives the image"""
     exists = os.path.isfile(SAVE_FILE)
     timestamp_full = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     timestamp_short = datetime.now().strftime("%Y%m%d_%H%M%S")
     
-    with open(SAVE_FILE, 'a', newline='', encoding='utf-8') as f:
-        writer = csv.writer(f)
-        if not exists:
-            writer.writerow(["Tarih", "Ülke", "Ad", "Soyad", "BelgeNo", "KimlikNo"])
-        writer.writerow([
-            timestamp_full,
-            data.get('ulke'),
-            data.get('ad'),
-            data.get('soyad'),
-            data.get('belge_no'),
-            data.get('tc_no')
-        ])
+    try:
+        with open(SAVE_FILE, 'a', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            if not exists:
+                writer.writerow(["Timestamp", "Type", "Country", "First Name", "Last Name", "Doc Number", "Verification"])
+            
+            writer.writerow([
+                timestamp_full,
+                data.get('document_type'),
+                data.get('country'),
+                data.get('first_name'),
+                data.get('last_name'),
+                data.get('document_number'),
+                data.get('verification')
+            ])
 
-    file_name = f"{data.get('ad')}_{data.get('soyad')}_{timestamp_short}.jpg".replace(" ", "_")
-    archive_path = os.path.join(ARCHIVE_FOLDER, file_name)
-    cv2.imwrite(archive_path, img)
+        safe_name = f"{data.get('first_name')}_{data.get('last_name')}_{timestamp_short}.jpg".replace(" ", "_")
+        archive_path = os.path.join(ARCHIVE_FOLDER, safe_name)
+        cv2.imwrite(archive_path, img)
+        logger.info(f"Data saved: {safe_name}")
+    except Exception as e:
+        logger.error(f"Error saving data: {str(e)}")
 
 @app.route('/')
 def home():
@@ -52,35 +58,39 @@ def home():
 def upload():
     try:
         data = request.json
-        img_base64 = data['image'].split(",")[1]
-        
+        if not data or 'image' not in data:
+            return jsonify({"status": "error", "message": "No image data provided"}), 400
+
+        # Decode base64 image
+        try:
+            img_base64 = data['image'].split(",")[1]
+        except IndexError:
+            return jsonify({"status": "error", "message": "Invalid image format"}), 400
+
         nparr = np.frombuffer(base64.b64decode(img_base64), np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
-        temp_path = "current_scan.jpg"
+        if img is None:
+            return jsonify({"status": "error", "message": "Could not decode image"}), 400
+        
+        temp_path = os.path.join(os.getcwd(), "current_scan.jpg")
         cv2.imwrite(temp_path, img)
         
+        # Process MRZ
         result = validator.process_mrz(temp_path)
         
-        if result["status"] == "ok":
-            # Loglama: Checksum hatası varsa log'a yaz
-            if result.get("dogrulama") == "CHECKSUM_HATASI":
-                logger.info(f"Checksum hatası tespit edildi - {result.get('ad')} {result.get('soyad')}, Belge No: {result.get('belge_no')}")
-            
-            # Kullanıcıya her zaman başarılı göster
-            user_result = result.copy()
-            user_result["dogrulama"] = "BAŞARILI"
-            
+        if result["status"] == "success":
+            if result.get("verification") == "CHECKSUM_ERROR":
+                logger.warning(f"Checksum mismatch: {result.get('first_name')} {result.get('last_name')}")
+
             save_all_data(result, img)
-            return jsonify(user_result)
+            return jsonify(result)
         else:
-            return jsonify({"status": "error", "msg": result.get("msg")})
+            return jsonify({"status": "fail", "message": result.get("message")}), 400
 
     except Exception as e:
-        return jsonify({"status": "error", "msg": str(e)})
+        logger.error(f"Unexpected error: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
-# --- CANLI SUNUCU AYARI ---
 if __name__ == '__main__':
-    # host='0.0.0.0' sayesinde 146.190.238.189 üzerinden erişim sağlanır
-    # debug=False yapıldı, canlı ortamda güvenlik ve hız için gereklidir
     app.run(host='0.0.0.0', port=5001, debug=False)
