@@ -31,20 +31,20 @@ def save_all_data(data, img):
         with open(SAVE_FILE, 'a', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
             if not exists:
-                writer.writerow(["Timestamp", "Type", "Country", "First Name", "Last Name", "Doc Number", "Verification", "Details"])
+                writer.writerow(["Timestamp", "Type", "Country", "First Name", "Last Name", "Doc Number", "Verification", "TC No"])
             
             writer.writerow([
                 timestamp_full,
                 data.get('document_type', 'ID'),
-                data.get('country'),
-                data.get('first_name'),
-                data.get('last_name'),
-                data.get('document_number'),
-                data.get('verification'),
-                data.get('details', '')
+                data.get('ulke'),
+                data.get('ad'),
+                data.get('soyad'),
+                data.get('belge_no'),
+                data.get('dogrulama'),
+                data.get('tc_no', '')
             ])
 
-        safe_name = f"{data.get('first_name')}_{data.get('last_name')}_{timestamp_short}.jpg".replace(" ", "_")
+        safe_name = f"{data.get('ad')}_{data.get('soyad')}_{timestamp_short}.jpg".replace(" ", "_")
         archive_path = os.path.join(ARCHIVE_FOLDER, safe_name)
         cv2.imwrite(archive_path, img)
         logger.info(f"Data saved: {safe_name}")
@@ -80,14 +80,14 @@ def upload():
         # Process MRZ
         result = validator.process_mrz(temp_path)
         
-        if result["status"] == "success":
-            if result.get("verification") == "CHECKSUM_ERROR":
-                logger.warning(f"Checksum mismatch: {result.get('first_name')} {result.get('last_name')}")
+        if result["status"] == "ok":
+            if result.get("dogrulama") == "CHECKSUM_HATASI":
+                logger.warning(f"Checksum mismatch: {result.get('ad')} {result.get('soyad')}")
 
             save_all_data(result, img)
             return jsonify(result)
         else:
-            return jsonify({"status": "fail", "message": result.get("message")}), 400
+            return jsonify({"status": "fail", "message": result.get("msg")}), 400
 
     except Exception as e:
         logger.error(f"Unexpected error: {str(e)}")

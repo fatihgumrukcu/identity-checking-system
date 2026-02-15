@@ -3,98 +3,85 @@ import easyocr
 import re
 import numpy as np
 from mrz.checker.td1 import TD1CodeChecker
-from mrz.checker.td3 import TD3CodeChecker
 
 class IdentityValidator:
     def __init__(self):
-        # OCR doğruluğu için CPU'da çalıştırıyoruz.
+        # MRZ karakterleri için sadece İngilizce yeterlidir
         self.reader = easyocr.Reader(['en'], gpu=False)
 
-    def force_numeric(self, text):
-        """Tarih alanlarındaki karakter hatalarını rakama zorlar."""
-        mapping = {'O': '0', 'I': '1', 'L': '1', 'G': '6', 'S': '5', 'B': '8', 'T': '7', 'Z': '2'}
-        for char, digit in mapping.items():
-            text = text.replace(char, digit)
-        return text
+    def clean_field(self, text):
+        if not text: return "Bilinmiyor"
+        # OCR karakter karıştırmalarını düzelt
+        text = text.replace('6', 'G').replace('0', 'O').replace('1', 'I').replace('5', 'S').replace('8', 'B')
+        return text.replace('<', ' ').strip()
 
     def apply_filters(self, roi, pass_num):
-        """Görüntüyü farklı kontrast ve keskinlik seviyelerinde işler."""
+        """Karanlık, bulanık ve uzak çekimler için optimize edilmiş filtre seti"""
         gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
         
-        if pass_num == 0:
-            # Standart iyileştirme
-            return cv2.threshold(cv2.GaussianBlur(gray, (3,3), 0), 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
-        elif pass_num == 1:
-            # Yüksek kontrast (Karanlık çekimler için)
-            clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
-            return clahe.apply(gray)
-        else:
-            # Keskinleştirme (Bulanık çekimler için)
-            kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
-            return cv2.filter2D(gray, -1, kernel)
+        # CLAHE: Karanlık bölgelerdeki gizli karakterleri ortaya çıkarır
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
+        cl_img = clahe.apply(gray)
+
+        if pass_num == 0: # Standart Mod
+            enhanced = cv2.convertScaleAbs(cl_img, alpha=1.8, beta=-40)
+            return cv2.threshold(enhanced, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+            
+        elif pass_num == 1: # Karanlık Mod (Yüksek Kontrast)
+            enhanced = cv2.convertScaleAbs(cl_img, alpha=2.3, beta=-60)
+            return cv2.threshold(enhanced, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+            
+        elif pass_num == 2: # Keskinleştirme Odaklı (Bulanıklık ve Uzaklık İçin)
+            kernel = np.array([[-1,-1,-1], [-1,10,-1], [-1,-1,-1]]) # Daha sert keskinleştirme
+            sharpened = cv2.filter2D(cl_img, -1, kernel)
+            return cv2.adaptiveThreshold(sharpened, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 13, 5)
+            
+        else: # İnce Detay Modu
+            return cv2.adaptiveThreshold(cl_img, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 11, 2)
 
     def process_mrz(self, path):
         img = cv2.imread(path)
-        if img is None: return {"status": "error", "message": "file_not_found"}
+        if img is None: return {"status": "error", "msg": "dosya_bulunamadi"}
 
-        # Dinamik ROI: Resmin alt %60'lık kısmını tara (Kimlik tipine göre değişebilir)
-        h, w = img.shape[:2]
-        roi = img[int(h*0.35):h, 0:w]
-        
-        for pass_num in range(3):
-            processed = self.apply_filters(roi, pass_num)
-            # OCR satırları paragraf olarak değil, tek tek okumalı
-            results = self.reader.readtext(processed, detail=0)
+        # Kullanıcı gride oturttuğu için 1000x600 standart boyutlandırma yapıyoruz
+        img_resized = cv2.resize(img, (1000, 600))
+        y_start, y_end = 350, 600
+        x_start, x_end = 10, 990
+        mrz_roi = img_resized[y_start:y_end, x_start:x_end]
+
+        for pass_num in range(4):
+            thresh = self.apply_filters(mrz_roi, pass_num)
             
-            # 1. ADIM: OCR çıktılarını temizle ama bütünlüğü bozma
-            raw_lines = [re.sub(r'[^A-Z0-9<]', '', t.upper()) for t in results]
-            full_text = "".join(raw_lines)
-            
-            print(f"--- PASS {pass_num} RAW: {full_text}")
+            # EasyOCR'a sadece MRZ karakterlerini beklemesini söylüyoruz
+            results = self.reader.readtext(thresh, detail=0, allowlist='0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ<')          
+            clean_text = "".join([re.sub(r'[^A-Z0-9<]', '', t.upper()) for t in results])
 
-            # 2. ADIM: TD3 (Pasaport) Ara - 44 karakter
-            td3_lines = re.findall(r'[A-Z0-9<]{40,45}', full_text)
-            if len(td3_lines) >= 2:
-                # En az bir tane '<' içeren satırları seç
-                mrz_lines = [l for l in td3_lines if '<' in l]
-                if len(mrz_lines) >= 2:
-                    final_mrz = "\n".join([l.ljust(44, '<')[:44] for l in mrz_lines[:2]])
-                    try:
-                        checker = TD3CodeChecker(final_mrz)
-                        return self.format_response(checker, "PASSPORT", pass_num)
-                    except: pass
+            lines = re.findall(r'[A-Z0-9<]{30}', clean_text)
+            if len(lines) < 3:
+                lines = []
+                for i in range(len(clean_text)):
+                    chunk = clean_text[i:i+30]
+                    if len(chunk) == 30 and chunk[0] in 'ICA':
+                        lines.append(chunk)
 
-            # 3. ADIM: TD1 (Kimlik) Ara - 30 karakter
-            td1_lines = re.findall(r'[A-Z0-9<]{27,33}', full_text)
-            if len(td1_lines) >= 3:
-                mrz_lines = [l for l in td1_lines if '<' in l]
-                if len(mrz_lines) >= 3:
-                    processed_td1 = []
-                    for i, l in enumerate(mrz_lines[:3]):
-                        line = l.ljust(30, '<')[:30]
-                        if i == 1: line = self.force_numeric(line)
-                        processed_td1.append(line)
-                    
-                    try:
-                        checker = TD1CodeChecker("\n".join(processed_td1))
-                        return self.format_response(checker, "ID_CARD", pass_num)
-                    except: pass
+            if len(lines) >= 3:
+                mrz_data = "\n".join(lines[:3])
+                try:
+                    checker = TD1CodeChecker(mrz_data)
+                    fields = checker.fields()
+                    is_valid = getattr(checker, 'valid', False) or (hasattr(checker, 'is_valid') and checker.is_valid())
 
-        return {"status": "fail", "message": "mrz_not_detected"}
+                    return {
+                        "status": "ok",
+                        "ulke": fields.country,
+                        "ad": self.clean_field(fields.name),
+                        "soyad": self.clean_field(fields.surname),
+                        "tc_no": fields.optional_data.replace('<', ''),
+                        "belge_no": fields.document_number.replace('<', ''),
+                        "dogrulama": "BAŞARILI" if is_valid else "CHECKSUM_HATASI",
+                        "pass_used": pass_num
+                    }
+                except:
+                    continue 
 
-    def format_response(self, checker, doc_type, pass_num):
-        fields = checker.fields()
-        report = checker.report()
-        is_valid = report.valid
-
-        return {
-            "status": "success",
-            "document_type": doc_type,
-            "country": fields.country,
-            "first_name": fields.name.replace('<', ' ').strip(),
-            "last_name": fields.surname.replace('<', ' ').strip(),
-            "document_number": fields.document_number.replace('<', ''),
-            "verification": "SUCCESS" if is_valid else "CHECKSUM_ERROR",
-            "pass_used": pass_num,
-            "details": str(report.errors) if not is_valid else "None"
-        }
+        return {"status": "fail", "msg": "mrz_formati_bulunamadi"}
