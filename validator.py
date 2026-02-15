@@ -7,113 +7,103 @@ from mrz.checker.td3 import TD3CodeChecker
 
 class IdentityValidator:
     def __init__(self):
+        # OCR modelini daha iyi sonuç için GPU=False (CPU'da daha kararlı olabilir) 
+        # veya varsa GPU=True yapabilirsin.
         self.reader = easyocr.Reader(['en'], gpu=False)
 
-    def force_numeric(self, text):
-        mapping = {'O': '0', 'I': '1', 'L': '1', 'G': '6', 'S': '5', 'B': '8', 'T': '7', 'Z': '2'}
-        for char, digit in mapping.items():
-            text = text.replace(char, digit)
+    def clean_mrz_line(self, text):
+        """MRZ satırındaki çöp karakterleri temizler ve standartlaştırır."""
+        # Sadece A-Z, 0-9 ve < karakterlerini tut
+        text = re.sub(r'[^A-Z0-9<]', '', text.upper())
         return text
 
-    def clean_field(self, text):
-        if not text: return "Bilinmiyor"
-        text = text.replace('6', 'G').replace('0', 'O').replace('1', 'I').replace('5', 'S').replace('8', 'B')
-        return text.replace('<', ' ').strip()
-
-    def apply_filters(self, roi, pass_num):
-        gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
-        cl_img = clahe.apply(gray)
-
-        if pass_num == 0:
-            enhanced = cv2.convertScaleAbs(cl_img, alpha=1.5, beta=0)
-            return cv2.threshold(enhanced, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
-        elif pass_num == 1:
-            return cv2.adaptiveThreshold(cl_img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 15, 8)
-        else:
-            kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
-            sharpened = cv2.filter2D(cl_img, -1, kernel)
-            return cv2.threshold(sharpened, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+    def apply_advanced_preprocessing(self, image):
+        """Görüntüyü OCR için optimize eder."""
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        
+        # 1. Gürültü Azaltma
+        blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+        
+        # 2. Kontrastı Artırma (CLAHE)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+        contrast = clahe.apply(blurred)
+        
+        # 3. Dinamik Eşikleme (Morfometrik İşlemler)
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+        dilated = cv2.dilate(contrast, kernel, iterations=1)
+        eroded = cv2.erode(dilated, kernel, iterations=1)
+        
+        return eroded
 
     def process_mrz(self, path):
         img = cv2.imread(path)
         if img is None: return {"status": "error", "msg": "dosya_bulunamadi"}
 
-        img_resized = cv2.resize(img, (1200, 800))
-        # ROI: Pasaport ve Kimliklerin MRZ alanını kapsayacak geniş bölge
-        mrz_roi = img_resized[450:780, 20:1180] 
-
+        # ROI'yi dinamik tutmak için resmi büyük ölçekte işliyoruz
+        h, w = img.shape[:2]
+        # Resmin sadece alt %50'sini al (MRZ her zaman alttadır)
+        roi = img[int(h*0.4):h, 0:w]
+        
+        # Farklı ön işleme kombinasyonları ile 3 deneme yap (Pass sistemi)
         for pass_num in range(3):
-            thresh = self.apply_filters(mrz_roi, pass_num)
-            results = self.reader.readtext(thresh, detail=0, allowlist='0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ<')
-            all_text = "".join([t.upper() for t in results])
+            if pass_num == 0:
+                processed = self.apply_advanced_preprocessing(roi)
+            elif pass_num == 1:
+                # Daha yüksek kontrast denemesi
+                processed = cv2.convertScaleAbs(roi, alpha=1.5, beta=10)
+                processed = cv2.cvtColor(processed, cv2.COLOR_BGR2GRAY)
+            else:
+                # Orijinal ROI üzerinde gri tonlama
+                processed = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+
+            # OCR Oku
+            results = self.reader.readtext(processed, detail=0, paragraph=False)
+            all_text_lines = [self.clean_mrz_line(t) for t in results if len(self.clean_mrz_line(t)) > 10]
             
-            print(f"--- PASS {pass_num} HAM METİN: {all_text}")
+            combined_text = "".join(all_text_lines)
+            print(f"--- PASS {pass_num} CLEANED TEXT: {combined_text}")
 
-            # 1. KİMLİK (TD1) KONTROLÜ - 30 Karakterli 3 Satır (Öncelikli)
-            td1_lines = re.findall(r'[A-Z0-9<]{28,32}', all_text)
-            if len(td1_lines) >= 3:
-                processed = []
-                for i, l in enumerate(td1_lines[:3]):
-                    line = l.ljust(30, '<')[:30]
-                    if i == 1: line = self.force_numeric(line)
-                    processed.append(line)
-                
+            # TD1 (Kimlik) Arama: 30 karakterlik 3 grup
+            td1_match = re.findall(r'[A-Z0-9<]{25,31}', combined_text)
+            if len(td1_match) >= 3:
+                # Satırları 30'a tamamla
+                mrz_lines = [line.ljust(30, '<')[:30] for line in td1_match[:3]]
+                mrz_data = "\n".join(mrz_lines)
                 try:
-                    mrz_data = "\n".join(processed)
-                    print(f"--- TD1 MRZ DATA:\n{mrz_data}")
                     checker = TD1CodeChecker(mrz_data)
-                    fields = checker.fields()
-                    print(f"--- TD1 FIELDS: {fields}")
-                    return self.format_response(checker, fields, "KİMLİK", pass_num)
-                except Exception as e:
-                    print(f"--- TD1 ERROR: {e}")
-                    pass
+                    if checker.report().valid or pass_num == 2: # Pass 2'de zorla döndür
+                        return self.format_response(checker, checker.fields(), "KİMLİK", pass_num)
+                except: pass
 
-            # 2. PASAPORT (TD3) KONTROLÜ - 44 Karakterli 2 Satır (Sonra)
-            td3_lines = re.findall(r'[A-Z0-9<]{42,46}', all_text)
-            if len(td3_lines) >= 2:
-                processed = []
-                for line in td3_lines[:2]:
-                    line = line.ljust(44, '<')[:44]
-                    processed.append(line)
-                
+            # TD3 (Pasaport) Arama: 44 karakterlik 2 grup
+            td3_match = re.findall(r'[A-Z0-9<]{40,45}', combined_text)
+            if len(td3_match) >= 2:
+                mrz_lines = [line.ljust(44, '<')[:44] for line in td3_match[:2]]
+                mrz_data = "\n".join(mrz_lines)
                 try:
-                    mrz_data = "\n".join(processed)
-                    print(f"--- TD3 MRZ DATA:\n{mrz_data}")
                     checker = TD3CodeChecker(mrz_data)
-                    fields = checker.fields()
-                    print(f"--- TD3 FIELDS: {fields}")
-                    return self.format_response(checker, fields, "PASAPORT", pass_num)
-                except Exception as e:
-                    print(f"--- TD3 ERROR: {e}")
-                    pass
+                    return self.format_response(checker, checker.fields(), "PASAPORT", pass_num)
+                except: pass
 
         return {"status": "fail", "msg": "mrz_okunamadi"}
 
     def format_response(self, checker, fields, doc_type, pass_num):
-        # Kütüphane sürümüne göre valid kontrolü
-        try:
-            if hasattr(checker, 'valid'):
-                is_valid = checker.valid
-            elif hasattr(checker, 'report'):
-                report = checker.report
-                errors = report() if callable(report) else (report.errors if hasattr(report, 'errors') else [])
-                is_valid = len(errors) == 0
-            else:
-                is_valid = True  # Fallback
-        except Exception as e:
-            print(f"Validation check error: {e}")
-            is_valid = False
+        # Checksum analizi
+        report = checker.report()
+        is_valid = report.valid
         
+        # Eğer checksum hatası varsa hangi alanların hatalı olduğunu logla
+        if not is_valid:
+            print(f"!!! CHECKSUM ERRORS: {report.errors}")
+
         return {
-            "status": "ok",
+            "status": "success",
             "document_type": doc_type,
-            "ulke": fields.country,
-            "ad": self.clean_field(fields.name),
-            "soyad": self.clean_field(fields.surname),
-            "belge_no": fields.document_number.replace('<', ''),
-            "tc_no": fields.optional_data.replace('<', '') if hasattr(fields, 'optional_data') else '',
-            "dogrulama": "BAŞARILI" if is_valid else "CHECKSUM_HATASI",
-            "pass_used": pass_num
+            "country": fields.country,
+            "first_name": fields.name.replace('<', ' ').strip(),
+            "last_name": fields.surname.replace('<', ' ').strip(),
+            "document_number": fields.document_number.replace('<', ''),
+            "verification": "SUCCESS" if is_valid else "CHECKSUM_ERROR",
+            "pass_used": pass_num,
+            "raw_report": str(report.errors) if not is_valid else None
         }
