@@ -11,11 +11,11 @@ from validator import IdentityValidator
 app = Flask(__name__)
 validator = IdentityValidator()
 
-# Logging Configuration
+# Sunucu loglama ayarları - Hataları terminalden izlemek için kritik
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# File and Folder Settings
+# Dosya ve Arşiv Ayarları
 SAVE_FILE = "verified_identities.csv"
 ARCHIVE_FOLDER = "archive"
 
@@ -23,7 +23,7 @@ if not os.path.exists(ARCHIVE_FOLDER):
     os.makedirs(ARCHIVE_FOLDER)
 
 def save_all_data(data, img):
-    """Saves validation results to CSV and archives the image"""
+    """Doğrulanan verileri CSV'ye yazar ve görseli arşivler"""
     exists = os.path.isfile(SAVE_FILE)
     timestamp_full = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     timestamp_short = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -31,7 +31,7 @@ def save_all_data(data, img):
     with open(SAVE_FILE, 'a', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
         if not exists:
-            # Header updated to English
+            # Başlıklar İngilizce olarak güncellendi
             writer.writerow(["Timestamp", "Type", "Country", "First Name", "Last Name", "Doc Number", "Verification"])
         
         writer.writerow([
@@ -44,9 +44,11 @@ def save_all_data(data, img):
             data.get('verification')
         ])
 
-    # Filename generated using English keys
-    safe_name = f"{data.get('first_name')}_{data.get('last_name')}_{timestamp_short}.jpg".replace(" ", "_")
-    archive_path = os.path.join(ARCHIVE_FOLDER, safe_name)
+    # Dosya ismi oluşturulurken yeni anahtarlar kullanılıyor
+    safe_first_name = str(data.get('first_name', 'Unknown')).replace(" ", "_")
+    safe_last_name = str(data.get('last_name', 'Unknown')).replace(" ", "_")
+    file_name = f"{safe_first_name}_{safe_last_name}_{timestamp_short}.jpg"
+    archive_path = os.path.join(ARCHIVE_FOLDER, file_name)
     cv2.imwrite(archive_path, img)
 
 @app.route('/')
@@ -58,8 +60,9 @@ def upload():
     try:
         data = request.json
         if not data or 'image' not in data:
-            return jsonify({"status": "error", "message": "no_image_data"}), 400
+            return jsonify({"status": "error", "message": "No image data provided"}), 400
 
+        # Base64 görseli decode etme
         img_base64 = data['image'].split(",")[1]
         nparr = np.frombuffer(base64.b64decode(img_base64), np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -67,26 +70,24 @@ def upload():
         temp_path = "current_scan.jpg"
         cv2.imwrite(temp_path, img)
         
-        # Call the updated English validator
+        # Validator çağrısı - Artık İngilizce anahtarlar dönüyor
         result = validator.process_mrz(temp_path)
         
-        if result["status"] == "success":
-            # Log Checksum errors internally
-            if result.get("verification") == "CHECKSUM_ERROR":
-                logger.warning(f"Checksum mismatch detected for: {result.get('first_name')} {result.get('last_name')}")
-
-            # Persist data using English keys
+        # 'success' kontrolü validator.py ile senkronize edildi
+        if result.get("status") == "success":
             save_all_data(result, img)
-            
-            # Return success to frontend
             return jsonify(result)
         else:
-            return jsonify({"status": "fail", "message": result.get("message")})
+            # Hata durumunda frontend'in 'null' almaması için uygun mesaj dönülüyor
+            return jsonify({
+                "status": "fail", 
+                "message": result.get("message", "MRZ not detected")
+            })
 
     except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        logger.error(f"Upload Error: {str(e)}")
+        return jsonify({"status": "error", "message": f"Server error: {str(e)}"}), 500
 
+# Droplet üzerinde 5001 portundan yayın yapılması için ayar
 if __name__ == '__main__':
-    # host='0.0.0.0' allows access via Droplet IP: 146.190.238.189
     app.run(host='0.0.0.0', port=5001, debug=False)

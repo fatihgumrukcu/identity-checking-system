@@ -1,443 +1,50 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Kimlik Doğrulama Sistemi</title>
+    <title>AI Identity Verification System</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: #0a0a0a;
-            color: #ffffff;
-            min-height: 100vh;
-            line-height: 1.6;
-        }
-
-        /* Background Grid Pattern */
-        body::before {
-            content: '';
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-image: 
-                linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
-            background-size: 50px 50px;
-            pointer-events: none;
-            z-index: 1;
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 40px 20px;
-            position: relative;
-            z-index: 2;
-        }
-
-        /* Header */
-        .header {
-            text-align: center;
-            margin-bottom: 60px;
-        }
-
-        .logo {
-            display: inline-flex;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 20px;
-        }
-
-        .logo-icon {
-            width: 40px;
-            height: 40px;
-            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            font-size: 18px;
-        }
-
-        h1 {
-            font-size: 3rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, #ffffff, #a1a1aa);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            margin-bottom: 15px;
-        }
-
-        .subtitle {
-            font-size: 1.2rem;
-            color: #71717a;
-            font-weight: 400;
-        }
-
-        /* Main Content */
-        .main-content {
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 20px;
-            padding: 40px;
-            backdrop-filter: blur(20px);
-        }
-
-        /* Upload Section */
-        .upload-section {
-            margin-bottom: 40px;
-        }
-
-        .section-title {
-            font-size: 1.1rem;
-            font-weight: 500;
-            color: #d4d4d8;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .step-number {
-            width: 24px;
-            height: 24px;
-            background: rgba(59, 130, 246, 0.2);
-            border: 1px solid #3b82f6;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-            font-weight: 600;
-        }
-
-        .upload-area {
-            background: rgba(255, 255, 255, 0.02);
-            border: 2px dashed rgba(255, 255, 255, 0.2);
-            border-radius: 16px;
-            padding: 60px 40px;
-            text-align: center;
-            transition: all 0.3s ease;
-            cursor: pointer;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .upload-area:hover {
-            border-color: #3b82f6;
-            background: rgba(59, 130, 246, 0.05);
-        }
-
-        .upload-area.has-file {
-            border-color: #10b981;
-            background: rgba(16, 185, 129, 0.05);
-        }
-
-        .upload-icon {
-            width: 80px;
-            height: 80px;
-            margin: 0 auto 24px;
-            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-            border-radius: 16px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 32px;
-        }
-
-        input[type="file"] {
-            display: none;
-        }
-
-        .file-label {
-            display: block;
-            cursor: pointer;
-            color: #d4d4d8;
-            font-weight: 500;
-            font-size: 1.1rem;
-            margin-bottom: 8px;
-        }
-
-        .upload-hint {
-            color: #71717a;
-            font-size: 0.9rem;
-        }
-
-        /* Image Container */
-        .img-container {
-            width: 100%;
-            max-height: 500px;
-            margin: 40px 0;
-            display: none;
-            border-radius: 16px;
-            overflow: hidden;
-            position: relative;
-            background: #000;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        /* MRZ Guide - Dark Theme */
-        .mrz-guide {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            height: 35%;
-            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(34, 197, 94, 0.15));
-            border-top: 2px solid #10b981;
-            color: #10b981;
-            font-size: 12px;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            pointer-events: none;
-            z-index: 10;
-            backdrop-filter: blur(5px);
-        }
-
-        /* Scan Animation - Dark Theme */
-        .scan-overlay {
-            display: none;
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            z-index: 20;
-            overflow: hidden;
-        }
-
-        .scan-line {
-            position: absolute;
-            width: 100%;
-            height: 100px;
-            background: linear-gradient(to bottom, 
-                transparent 0%, 
-                rgba(59, 130, 246, 0.1) 20%,
-                rgba(59, 130, 246, 0.4) 50%,
-                #3b82f6 60%,
-                rgba(59, 130, 246, 0.4) 70%,
-                rgba(59, 130, 246, 0.1) 80%,
-                transparent 100%
-            );
-            border-bottom: 2px solid #3b82f6;
-            box-shadow: 0 0 30px rgba(59, 130, 246, 0.8);
-            animation: modern-scan 2.5s ease-in-out infinite;
-        }
-
-        @keyframes modern-scan {
-            0% { 
-                top: -100px; 
-                opacity: 0; 
-                transform: scaleY(0.8);
-            }
-            15% { 
-                opacity: 1; 
-                transform: scaleY(1);
-            }
-            85% { 
-                opacity: 1; 
-                transform: scaleY(1);
-            }
-            100% { 
-                top: 100%; 
-                opacity: 0; 
-                transform: scaleY(0.8);
-            }
-        }
-
-        /* Controls */
-        .controls {
-            margin-top: 40px;
-            text-align: center;
-        }
-
-        .verify-btn {
-            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-            color: white;
-            border: none;
-            padding: 16px 48px;
-            font-size: 1.1rem;
-            font-weight: 600;
-            border-radius: 12px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3);
-            position: relative;
-            overflow: hidden;
-        }
-
-        .verify-btn::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-            transition: left 0.5s ease;
-        }
-
-        .verify-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 25px rgba(59, 130, 246, 0.4);
-        }
-
-        .verify-btn:hover::before {
-            left: 100%;
-        }
-
-        .verify-btn:active {
-            transform: translateY(0);
-        }
-
-        /* Results */
-        #result {
-            margin-top: 40px;
-        }
-
-        .success-card {
-            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(34, 197, 94, 0.05));
-            border: 1px solid #10b981;
-            padding: 24px;
-            border-radius: 16px;
-            backdrop-filter: blur(10px);
-        }
-
-        .success-card h3 {
-            color: #10b981;
-            font-size: 1.3rem;
-            margin-bottom: 16px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .error-card {
-            background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.05));
-            border: 1px solid #ef4444;
-            padding: 24px;
-            border-radius: 16px;
-            backdrop-filter: blur(10px);
-            color: #ef4444;
-            font-weight: 500;
-        }
-
-        .loading-message {
-            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(139, 92, 246, 0.05));
-            border: 1px solid #3b82f6;
-            padding: 24px;
-            border-radius: 16px;
-            backdrop-filter: blur(10px);
-            color: #3b82f6;
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 16px;
-        }
-
-        .spinner {
-            width: 20px;
-            height: 20px;
-            border: 3px solid rgba(255, 255, 255, 0.1);
-            border-top: 3px solid #3b82f6;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        pre {
-            background: rgba(0, 0, 0, 0.5);
-            padding: 20px;
-            border-radius: 12px;
-            overflow-x: auto;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.9rem;
-            line-height: 1.5;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        /* Responsive Design */
-        @media (max-width: 768px) {
-            .container {
-                padding: 20px 15px;
-            }
-
-            h1 {
-                font-size: 2rem;
-            }
-
-            .main-content {
-                padding: 30px 20px;
-            }
-
-            .upload-area {
-                padding: 40px 20px;
-            }
-
-            .verify-btn {
-                padding: 14px 32px;
-                font-size: 1rem;
-            }
-        }
-
-        @media (max-width: 480px) {
-            h1 {
-                font-size: 1.75rem;
-            }
-
-            .main-content {
-                padding: 25px 15px;
-            }
-
-            .upload-area {
-                padding: 30px 15px;
-            }
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: #0a0a0a; color: #ffffff; min-height: 100vh; line-height: 1.6; }
+        body::before { content: ''; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-image: linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px); background-size: 50px 50px; pointer-events: none; z-index: 1; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 40px 20px; position: relative; z-index: 2; }
+        .header { text-align: center; margin-bottom: 60px; }
+        .logo-icon { width: 40px; height: 40px; background: linear-gradient(135deg, #3b82f6, #8b5cf6); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 18px; margin: 0 auto 20px; }
+        h1 { font-size: 3rem; font-weight: 700; background: linear-gradient(135deg, #ffffff, #a1a1aa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 15px; }
+        .subtitle { color: #71717a; }
+        .main-content { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 20px; padding: 40px; backdrop-filter: blur(20px); }
+        .upload-area { background: rgba(255, 255, 255, 0.02); border: 2px dashed rgba(255, 255, 255, 0.2); border-radius: 16px; padding: 60px 40px; text-align: center; cursor: pointer; transition: 0.3s; }
+        .upload-area:hover { border-color: #3b82f6; background: rgba(59, 130, 246, 0.05); }
+        .img-container { width: 100%; max-height: 500px; margin: 40px 0; display: none; border-radius: 16px; overflow: hidden; position: relative; background: #000; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .mrz-guide { position: absolute; bottom: 0; left: 0; width: 100%; height: 35%; background: rgba(16, 185, 129, 0.1); border-top: 2px solid #10b981; color: #10b981; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 10; backdrop-filter: blur(5px); }
+        .scan-overlay { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 20; overflow: hidden; }
+        .scan-line { position: absolute; width: 100%; height: 100px; background: linear-gradient(to bottom, transparent, #3b82f6, transparent); border-bottom: 2px solid #3b82f6; animation: scan 2.5s infinite; }
+        @keyframes scan { 0% { top: -100px; } 100% { top: 100%; } }
+        .verify-btn { background: linear-gradient(135deg, #3b82f6, #8b5cf6); color: white; border: none; padding: 16px 48px; font-size: 1.1rem; font-weight: 600; border-radius: 12px; cursor: pointer; transition: 0.3s; }
+        .success-card { background: rgba(16, 185, 129, 0.1); border: 1px solid #10b981; padding: 24px; border-radius: 16px; }
+        .error-card { background: rgba(239, 68, 68, 0.1); border: 1px solid #ef4444; padding: 24px; border-radius: 16px; color: #ef4444; }
+        .loading-message { color: #3b82f6; display: flex; align-items: center; gap: 16px; padding: 20px; }
+        pre { background: rgba(0, 0, 0, 0.5); padding: 20px; border-radius: 12px; font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; margin-top: 15px; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .step-number { width: 24px; height: 24px; background: rgba(59, 130, 246, 0.2); border: 1px solid #3b82f6; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; margin-right: 10px; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <div class="logo">
-                <div class="logo-icon">AI</div>
-            </div>
-            <h1>AI Kimlik Doğrulama Sistemi</h1>
-            <p class="subtitle">Gelişmiş yapay zeka ile kimlik doğrulama</p>
+            <div class="logo-icon">AI</div>
+            <h1>Identity Verification</h1>
+            <p class="subtitle">AI-powered MRZ Analysis & Document Validation</p>
         </div>
 
         <div class="main-content">
             <div class="upload-section">
-                <div class="section-title">
-                    <div class="step-number">1</div>
-                    <span>Kimlik Görseli Yükle</span>
-                </div>
-                
+                <p style="margin-bottom: 20px;"><span class="step-number">1</span><strong>Upload Document Image</strong></p>
                 <div class="upload-area" id="uploadArea">
-                    <div class="upload-icon">ID</div>
-                    <label for="fileInput" class="file-label">
-                        Kimlik görselinizi yükleyin
-                    </label>
-                    <div class="upload-hint">Sürükleyip bırakabilir veya tıklayarak seçebilirsiniz</div>
-                    <input type="file" id="fileInput" accept="image/*">
+                    <p id="uploadStatus">Click or drag & drop ID/Passport image</p>
+                    <input type="file" id="fileInput" accept="image/*" style="display:none">
                 </div>
             </div>
 
@@ -445,17 +52,12 @@
                 <img id="image">
             </div>
 
-            <div class="controls" id="actionButtons" style="display: none;">
-                <div class="section-title">
-                    <div class="step-number">2</div>
-                    <span>Doğrulamayı Başlat</span>
-                </div>
-                <button id="verifyBtn" class="verify-btn">
-                    Analiz Et ve Doğrula
-                </button>
+            <div class="controls" id="actionButtons" style="display: none; text-align: center;">
+                <p style="margin-bottom: 20px;"><span class="step-number">2</span><strong>Start Analysis</strong></p>
+                <button id="verifyBtn" class="verify-btn">Verify Identity</button>
             </div>
             
-            <div id="result"></div>
+            <div id="result" style="margin-top: 30px;"></div>
         </div>
     </div>
 
@@ -463,70 +65,42 @@
     <script>
         let cropper;
         const fileInput = document.getElementById('fileInput');
-        const image = document.getElementById('image');
+        const uploadArea = document.getElementById('uploadArea');
         const cropperWrapper = document.getElementById('cropperWrapper');
         const actionButtons = document.getElementById('actionButtons');
-        const uploadArea = document.getElementById('uploadArea');
 
-        // Drag and drop functionality
-        uploadArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadArea.style.borderColor = '#3b82f6';
-            uploadArea.style.background = 'rgba(59, 130, 246, 0.05)';
-        });
-
-        uploadArea.addEventListener('dragleave', (e) => {
-            e.preventDefault();
-            uploadArea.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-            uploadArea.style.background = 'rgba(255, 255, 255, 0.02)';
-        });
-
-        uploadArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadArea.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-            uploadArea.style.background = 'rgba(255, 255, 255, 0.02)';
-            
-            const files = e.dataTransfer.files;
-            if (files.length > 0 && files[0].type.startsWith('image/')) {
-                fileInput.files = files;
-                handleFileSelect(files[0]);
-            }
-        });
+        uploadArea.onclick = () => fileInput.click();
 
         fileInput.onchange = (e) => {
             const file = e.target.files[0];
-            if (file) {
-                handleFileSelect(file);
-            }
+            if (file) handleFile(file);
         };
 
-        function handleFileSelect(file) {
+        function handleFile(file) {
             const reader = new FileReader();
-            reader.onload = (event) => {
-                image.src = event.target.result;
+            reader.onload = (e) => {
+                const img = document.getElementById('image');
+                img.src = e.target.result;
                 cropperWrapper.style.display = 'block';
                 actionButtons.style.display = 'block';
-                uploadArea.classList.add('has-file');
-                uploadArea.querySelector('.file-label').textContent = `${file.name} yüklendi`;
-                uploadArea.querySelector('.upload-hint').textContent = 'MRZ alanını yeşil bölgeye konumlandırın';
+                document.getElementById('uploadStatus').innerText = file.name + " loaded";
                 
                 if (cropper) cropper.destroy();
-                
-                cropper = new Cropper(image, {
+                cropper = new Cropper(img, {
                     aspectRatio: 10 / 6,
                     viewMode: 1,
                     ready() {
                         const face = document.querySelector('.cropper-face');
                         const guide = document.createElement('div');
                         guide.className = 'mrz-guide';
-                        guide.innerText = 'MRZ ALANI';
+                        guide.innerText = 'ALIGN MRZ AREA HERE';
                         face.appendChild(guide);
 
-                        const overlay = document.createElement('div');
-                        overlay.className = 'scan-overlay';
-                        overlay.id = 'scanOverlay';
-                        overlay.innerHTML = '<div class="scan-line"></div>';
-                        face.appendChild(overlay);
+                        const scan = document.createElement('div');
+                        scan.className = 'scan-overlay';
+                        scan.id = 'scanOverlay';
+                        scan.innerHTML = '<div class="scan-line"></div>';
+                        face.appendChild(scan);
                     }
                 });
             };
@@ -534,21 +108,14 @@
         }
 
         document.getElementById('verifyBtn').onclick = () => {
-            const overlay = document.getElementById('scanOverlay');
             const resultDiv = document.getElementById('result');
-            
+            const overlay = document.getElementById('scanOverlay');
             overlay.style.display = 'block';
-            resultDiv.innerHTML = `
-                <div class="loading-message">
-                    <div class="spinner"></div>
-                    <span>AI doğrulama işlemi devam ediyor...</span>
-                </div>
-            `;
 
-            const canvas = cropper.getCroppedCanvas({ width: 1000, height: 600 });
+            resultDiv.innerHTML = `<div class="loading-message">Analyzing document with AI...</div>`;
+
+            const canvas = cropper.getCroppedCanvas({ width: 1200, height: 800 });
             const dataUrl = canvas.toDataURL('image/jpeg');
-
-            const startTime = Date.now();
 
             fetch('/upload', {
                 method: 'POST',
@@ -557,28 +124,25 @@
             })
             .then(res => res.json())
             .then(data => {
-                const elapsedTime = Date.now() - startTime;
-                const minWait = 3000; 
-                const remainingTime = Math.max(0, minWait - elapsedTime);
-
-                setTimeout(() => {
-                    overlay.style.display = 'none';
-                    if(data.status === "ok") {
-                        resultDiv.className = 'success-card';
-                        resultDiv.innerHTML = `
-                            <h3>Doğrulama Başarılı</h3>
-                            <pre>${JSON.stringify(data, null, 2)}</pre>
-                        `;
-                    } else {
-                        resultDiv.className = 'error-card';
-                        resultDiv.innerHTML = `<div>Hata: ${data.msg}</div>`;
-                    }
-                }, remainingTime);
+                overlay.style.display = 'none';
+                // Backend 'success' dönüyor
+                if (data.status === "success") {
+                    resultDiv.className = 'success-card';
+                    resultDiv.innerHTML = `
+                        <h3 style="color:#10b981">Verification Success</h3>
+                        <p><strong>Name:</strong> ${data.first_name} ${data.last_name}</p>
+                        <p><strong>Document:</strong> ${data.document_type} (${data.country})</p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                } else {
+                    resultDiv.className = 'error-card';
+                    resultDiv.innerHTML = `Error: ${data.message || "Detection failed"}`;
+                }
             })
-            .catch(error => {
+            .catch(err => {
                 overlay.style.display = 'none';
                 resultDiv.className = 'error-card';
-                resultDiv.innerHTML = `<div>Bağlantı hatası: ${error.message}</div>`;
+                resultDiv.innerHTML = "Connection Error: " + err.message;
             });
         };
     </script>
