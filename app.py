@@ -31,7 +31,7 @@ def save_all_data(data, img):
         with open(SAVE_FILE, 'a', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
             if not exists:
-                writer.writerow(["Timestamp", "Type", "Country", "First Name", "Last Name", "Doc Number", "Verification", "TC No"])
+                writer.writerow(["Timestamp", "Type", "Country", "First Name", "Last Name", "Doc Number", "Verification", "Doc Checksum", "Birth Checksum", "Expiry Checksum", "Logical Date Check"])
             
             writer.writerow([
                 timestamp_full,
@@ -41,7 +41,10 @@ def save_all_data(data, img):
                 data.get('soyad'),
                 data.get('belge_no'),
                 data.get('dogrulama'),
-                data.get('tc_no', '')
+                data.get('doc_checksum', ''),
+                data.get('birth_checksum', ''),
+                data.get('expiry_checksum', ''),
+                data.get('logical_date_check', '')
             ])
 
         safe_name = f"{data.get('ad')}_{data.get('soyad')}_{timestamp_short}.jpg".replace(" ", "_")
