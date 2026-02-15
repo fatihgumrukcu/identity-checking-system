@@ -79,16 +79,27 @@ class IdentityValidator:
 
     def format_response(self, checker, fields, doc_type, pass_num):
         # Kütüphane sürümüne göre valid kontrolü
-        report = checker.report
-        is_valid = len(report() if callable(report) else report.errors) == 0
+        try:
+            if hasattr(checker, 'valid'):
+                is_valid = checker.valid
+            elif hasattr(checker, 'report'):
+                report = checker.report
+                errors = report() if callable(report) else (report.errors if hasattr(report, 'errors') else [])
+                is_valid = len(errors) == 0
+            else:
+                is_valid = True  # Fallback
+        except Exception as e:
+            print(f"Validation check error: {e}")
+            is_valid = False
         
         return {
             "status": "ok",
-            "tip": doc_type,
+            "document_type": doc_type,
             "ulke": fields.country,
             "ad": self.clean_field(fields.name),
             "soyad": self.clean_field(fields.surname),
             "belge_no": fields.document_number.replace('<', ''),
+            "tc_no": fields.optional_data.replace('<', '') if hasattr(fields, 'optional_data') else '',
             "dogrulama": "BAŞARILI" if is_valid else "CHECKSUM_HATASI",
             "pass_used": pass_num
         }

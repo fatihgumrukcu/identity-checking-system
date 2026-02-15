@@ -1,58 +1,39 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Kimlik Doğrulama Sistemi</title>
+    <title>Identity Verification System</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="container">
-        <!-- Header -->
         <div class="header">
-            <div class="logo">
-                <div class="logo-icon">AI</div>
-            </div>
-            <h1>AI Kimlik Doğrulama Sistemi</h1>
-            <p class="subtitle">Gelişmiş yapay zeka ile kimlik doğrulama</p>
+            <h2>Identity Verification System</h2>
+            <p class="subtitle">Upload the image and fit the text lines into the <span class="highlight">green zone</span>.</p>
+        </div>
+        
+        <div class="upload-area" id="uploadArea">
+            <div class="upload-icon"></div>
+            <label for="fileInput" class="file-label">
+                Click or drag to upload your identity image
+            </label>
+            <input type="file" id="fileInput" accept="image/*">
+        </div>
+        
+        <div class="img-container" id="cropperWrapper">
+            <img id="image">
         </div>
 
-        <!-- Main Content -->
-        <div class="main-content">
-            <!-- Upload Section -->
-            <div class="upload-section">
-                <div class="section-title">
-                    <div class="step-number">1</div>
-                    <span>Kimlik Görseli Yükle</span>
-                </div>
-                
-                <div class="upload-area" id="uploadArea">
-                    <div class="upload-icon">ID</div>
-                    <label for="fileInput" class="file-label">Kimlik görselinizi yükleyin</label>
-                    <div class="upload-hint">Sürükleyip bırakabilir veya tıklayarak seçebilirsiniz</div>
-                    <input type="file" id="fileInput" accept="image/*">
-                </div>
-            </div>
-
-            <!-- Image Cropper -->
-            <div class="img-container" id="cropperWrapper">
-                <img id="image" alt="Kimlik görseli">
-            </div>
-
-            <!-- Action Buttons -->
-            <div class="controls" id="actionButtons" style="display: none;">
-                <div class="section-title">
-                    <div class="step-number">2</div>
-                    <span>Doğrulamayı Başlat</span>
-                </div>
-                <button id="verifyBtn" class="verify-btn">Analiz Et ve Doğrula</button>
-            </div>
-            
-            <!-- Result Section -->
-            <div id="result"></div>
+        <div class="controls" id="actionButtons" style="display: none;">
+            <button id="verifyBtn" class="verify-btn">
+                Analyze and Save
+            </button>
         </div>
+        
+        <div id="result"></div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
