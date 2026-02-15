@@ -47,8 +47,9 @@ class IdentityValidator:
         img = cv2.imread(path)
         if img is None: return {"status": "error", "msg": "dosya_bulunamadi"}
 
-        # Dinamik ROI: Tarama alanını dikeyde genişleterek Bulgaristan/Avusturya kartlarını kapsıyoruz
+        # Boyutlandırmayı ve ROI alanını biraz genişleterek esneklik sağlıyoruz
         img_resized = cv2.resize(img, (1200, 800))
+        # Tarama alanını dikeyde genişlettik (Bulgaristan/Avusturya kartları için kritik)
         mrz_roi = img_resized[300:790, 10:1190] 
 
         for pass_num in range(4):
@@ -56,45 +57,35 @@ class IdentityValidator:
             results = self.reader.readtext(thresh, detail=0, allowlist='0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ<')          
             clean_text = "".join([re.sub(r'[^A-Z0-9<]', '', t.upper()) for t in results])
 
-            # 1. Pasaport (TD3) Kontrolü - 44 Karakter x 2 Satır
-            td3_lines = re.findall(r'[A-Z0-9<]{40,46}', clean_text)
-            if len(td3_lines) >= 2:
-                mrz_data = "\n".join([l.ljust(44, '<')[:44] for l in td3_lines[:2]])
+            # 1. Pasaport (TD3) Kontrolü - 44 Karakter
+            lines = re.findall(r'[A-Z0-9<]{40,46}', clean_text)
+            if len(lines) >= 2:
+                mrz_data = "\n".join([l.ljust(44, '<')[:44] for l in lines[:2]])
                 try:
                     checker = TD3CodeChecker(mrz_data)
-                    return self.finalize_data(checker, pass_num)
+                    return self.prepare_result(checker, pass_num)
                 except: pass
 
-            # 2. Vize/Kart (TD2) Kontrolü - 36 Karakter x 2 Satır
-            td2_lines = re.findall(r'[A-Z0-9<]{34,38}', clean_text)
-            if len(td2_lines) >= 2:
-                mrz_data = "\n".join([l.ljust(36, '<')[:36] for l in td2_lines[:2]])
-                try:
-                    checker = TD2CodeChecker(mrz_data)
-                    return self.finalize_data(checker, pass_num)
-                except: pass
-
-            # 3. Kimlik (TD1) Kontrolü - 30 Karakter x 3 Satır
-            td1_lines = re.findall(r'[A-Z0-9<]{28,32}', clean_text)
-            if len(td1_lines) >= 3:
-                # 2. satırı sayısal güvenliğe zorla
-                processed = [td1_lines[0].ljust(30, '<')[:30], 
-                             self.force_numeric(td1_lines[1].ljust(30, '<')[:30]), 
-                             td1_lines[2].ljust(30, '<')[:30]]
+            # 2. Kimlik (TD1) Kontrolü - 30 Karakter
+            lines = re.findall(r'[A-Z0-9<]{28,32}', clean_text)
+            if len(lines) >= 3:
+                # 2. satırı sayısal onarıma sok (Tarih güvenliği)
+                processed = [lines[0].ljust(30, '<')[:30], 
+                             self.force_numeric(lines[1].ljust(30, '<')[:30]), 
+                             lines[2].ljust(30, '<')[:30]]
                 try:
                     checker = TD1CodeChecker("\n".join(processed))
-                    return self.finalize_data(checker, pass_num)
+                    return self.prepare_result(checker, pass_num)
                 except: pass
 
         return {"status": "fail", "msg": "mrz_formati_bulunamadi"}
 
-    def finalize_data(self, checker, pass_used):
-        """Mevcut değişken isimlerini koruyarak sonucu döndürür"""
+    def prepare_result(self, checker, pass_num):
         fields = checker.fields()
-        # Kütüphane versiyonuna göre doğruluk kontrolü
+        # Checksum kontrolü
         report = checker.report()
         is_valid = len(report.errors) == 0
-
+        
         return {
             "status": "ok",
             "ulke": fields.country,
@@ -103,5 +94,5 @@ class IdentityValidator:
             "tc_no": fields.optional_data.replace('<', '') if hasattr(fields, 'optional_data') else "",
             "belge_no": fields.document_number.replace('<', ''),
             "dogrulama": "BAŞARILI" if is_valid else "CHECKSUM_HATASI",
-            "pass_used": pass_used
+            "pass_used": pass_num
         }
